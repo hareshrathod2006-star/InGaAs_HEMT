@@ -1,327 +1,197 @@
-;------------------------------------------------------------
-(sde:clear)
-;-------------------------------------------------------------------------------------
-; InGaAs HEMT  -  SDE structure file
-; Study      : InGaAs CHANNEL MOLE FRACTION SWEEP
-;
-; Workbench parameters used in this file
-;   @xInGaAs@  - Indium mole fraction x in In_x Ga_(1-x) As channel
-;                Dimensionless, range 0.0 to 1.0
-;                Physically meaningful range for this structure: 0.53 to 0.80
-;                  0.53 = lattice-matched to InP (reference)
-;                  0.65 = moderate strain on GaAs, common for GaAs-based HEMT
-;                  0.75 = original value in this device
-;                  0.80 = high In, high strain, high electron velocity but
-;                         increased risk of misfit dislocations on GaAs substrate
-;                NOTE: This parameter is passed to BOTH SDE (for geometry
-;                labelling only - InGaAs material properties are set in
-;                SDevice via MoleFraction) AND to the paired SDevice file.
-;                The SDE geometry does not change with mole fraction;
-;                only the SDevice physics changes. Therefore you can reuse
-;                ONE mesh for all mole fraction sweep points and only
-;                re-run SDevice. Set up Workbench so that SDE runs only
-;                once at the nominal geometry and SDevice is re-run for
-;                each @xInGaAs@ value. This saves significant runtime.
-;
-;   NOTE ON CHANNEL THICKNESS: As In content increases above ~0.65 on a
-;   GaAs substrate, the critical thickness for pseudomorphic growth
-;   decreases. HChannel = 0.01 um (10 nm) is safe up to x ~ 0.80.
-;   If you sweep above 0.80, consider also sweeping HChannel downward
-;   to stay below the Matthews-Blakeslee critical thickness.
-;----------------------------------------------------------------------;
-; Definitions
-;----------------------------------------------------------------------;
-(define  HGaAsSub   0.8)
-(display "Height of GaAs substrate: ") (display HGaAsSub) (display "um") (newline)
+*----------------------------------------------------------------------*
+* SDevice input  -  InGaAs HEMT
+* Study : InGaAs CHANNEL MOLE FRACTION SWEEP
+*
+* ======================================================================
+* How this study works
+* ======================================================================
+* The In mole fraction @xInGaAs@ changes ONLY the material physics —
+* bandgap, effective mass, electron velocity, conduction band offset.
+* The GEOMETRY does not change. Therefore:
+*
+*   - SDE runs ONCE at the nominal geometry
+*   - This SDevice file re-runs for EVERY @xInGaAs@ sweep point
+*   - Set up Workbench so SDE is NOT in the sweep loop — only SDevice is
+*   - The @tdr@ input to SDevice always points to the same mesh file
+*
+* This is the most efficient way to run this study and is physically
+* correct because the crystal structure of InGaAs does not change
+* enough at constant thickness to require a new mesh.
+*
+* The key mechanism producing variation:
+*   Higher In content (x) =>
+*     Lower bandgap => smaller conduction band offset => weaker 2DEG confinement
+*     BUT higher electron mobility and peak velocity => higher fT per unit gm
+*     AND higher delta-Ec relative to GaAs substrate => better confinement
+*     Net result: non-monotonic gm vs x, with fT peaking around x = 0.70-0.75
+*
+* ======================================================================
+* Workbench parameters in this file
+* ======================================================================
+*   @xInGaAs@      In mole fraction in InGaAs channel
+*                  THIS IS DIRECTLY USED in MoleFraction( xFraction= @xInGaAs@ )
+*                  Sweep range: 0.53 to 0.80
+*                  Baseline: 0.75
+*                  This is the parameter that was NOT being substituted
+*                  correctly in the previous combined file.
+*
+*   @xAlGaAs@      Al mole fraction in AlGaAs barrier
+*                  Baseline: 0.30
+*                  Keep fixed for a pure channel composition study.
+*                  Co-sweep with @xInGaAs@ only if you want to maintain
+*                  a fixed conduction band offset ratio.
+*
+*   @SubTrap_Conc@ Trap concentration in substrate [cm^-3]  fixed: 1e16
+*
+*   @Vgmin@  @Vgmax@  @Vd@  @nPerDecade@  @Rfb@  as before
+*
+* ======================================================================
+* IMPORTANT - verify these in your Sentaurus parameter file (.par):
+* The parameter file must contain InGaAs material parameters that are
+* defined as a FUNCTION of mole fraction x, not hardcoded for x=0.75.
+* Standard Sentaurus GaAs.par and InGaAs.par files support this.
+* If your parameter file has hardcoded values for x=0.75 only, then
+* changing @xInGaAs@ in the MoleFraction block will not produce the
+* correct bandgap or effective mass — it will still use x=0.75 values.
+* Check your .par file for lines like:
+*   Bandgap { ... }
+*   eDOS { ... }
+* and confirm they use the mole fraction interpolation scheme.
+* ======================================================================
+*----------------------------------------------------------------------*
+Device HEMT {
+*----------------------------------------------------------------------*
+Electrode{
+   { Name="source"    Voltage= 0.0 Resistor= 150 }
+   { Name="drain"     Voltage= 0.0 Resistor= 150 }
+   { Name="gate"      Voltage= 0.0 Schottky Barrier= 0.9
+       eRecVelocity= 1.e7 hRecVelocity= 1.e7 }
+   { Name="substrate" Voltage= 0.0 Resistor= 1e3 }
+}
+File{
+   Grid=      "@tdr@"
+   Parameter= "@parameter@"
+   Current=   "@plot@"
+   Plot=      "@tdrdat@"
+}
+Physics {
+   Hydrodynamic( eTemperature )
+   Mobility(
+      eHighFieldSaturation
+   )
+   EffectiveIntrinsicDensity( NoBandGapNarrowing )
+   Recombination(
+      SRH Auger Radiative
+   )
+}
+Physics( Material="GaAs" ){
+   Mobility( Dopingdependence )
+}
 
-(define  HChannel   0.01)
-(display "Height of InGaAs channel: ") (display HChannel) (display "um") (newline)
+*--- AlGaAs barrier composition --------------------------------------
+* @xAlGaAs@ is swept in Workbench parameter table.
+* For a fixed barrier study set @xAlGaAs@ = 0.30 in the parameter table.
+* For a co-sweep (fixed band offset) use a formula in Workbench:
+*   xAlGaAs = 0.30 + (xInGaAs - 0.75) * 0.5  (approximate linear rule)
+*----------------------------------------------------------------------*
+Physics( Material="AlGaAs" ){
+   MoleFraction( xFraction= @xAlGaAs@ Grading= 0)
+}
 
-(define  HSpacer    0.0345)
-(display "Height of AlGaAs barrier: ") (display HSpacer) (display "um") (newline)
+*--- InGaAs channel composition --------------------------------------
+* THIS is the line that produces the variation in results.
+* @xInGaAs@ is substituted directly here by Workbench.
+* Sentaurus then uses this value to interpolate InGaAs material
+* parameters (bandgap, effective mass, permittivity, mobility) from
+* the binary endpoint values in the parameter file.
+*----------------------------------------------------------------------*
+Physics( Material="InGaAs"){
+   MoleFraction( xFraction= @xInGaAs@ Grading= 0)
+}
 
-(define  YDelta     0.031)
-(define  DeltaThick 0.002)
-(define  HGaAsCap   0.03)
-(define  HPass      0.05)
-(define  Xmax    0.8)
-(define  Lg      0.25)
-(define  Lc      0.05)
-(define  GRecess 0.015)
-(define  Wsp     0.04)
-(define  WTrap   0.03)
-(define  SheetCharge 5.4e12)
+*--- Substrate trap: fixed for this study ----------------------------
+Physics( Region="R.GaAsSub" ){
+    Traps(
+       (Donor
+        Conc=      @SubTrap_Conc@
+        EnergyMid= 0.61  fromCondBand
+        eXsection= 2.5e-18
+        hXsection= 2.5e-16)
+    )
+}
 
-;--- InGaAs mole fraction from Workbench ------------------------------
-; xInGaAs is used here only for display/annotation.
-; The actual physics (bandgap, effective mass, mobility) are set in
-; SDevice via MoleFraction( xFraction= @xInGaAs@ ).
-(define xInGaAs @xInGaAs@)
-(display "InGaAs In mole fraction (SWEEP PARAMETER): ") (display xInGaAs) (newline)
-(display "SheetCharge: ") (display SheetCharge) (display "cm-2") (newline)
-
-;----------------------------------------------------------------------;
-; Derived Quantities  -  geometry unchanged by mole fraction
-;----------------------------------------------------------------------;
-(define Y0   0.0)
-(define Y1   (+ Y0  HSpacer))
-(define Y2   (+ Y1  HChannel))
-(define Y3   (+ Y2  HGaAsSub))
-(define Ym1  (- Y0  HGaAsCap))
-(define Ym2  (- Ym1 HPass))
-
-(define Xg   (/ Lg 2.0))
-(define Xsp  (+ Xg Wsp))
-(define Xgt  (+ Xg WTrap))
-(define Xc   (- Xmax Lc))
-(define XcM  (-  Xmax (* 2.5 Lc)))
-(define Yg   (+ Y0 GRecess))
-(define XT   0.3)
-
-;----------------------------------------------------------------------;
-; Layer System  -  identical geometry for all mole fraction values
-;----------------------------------------------------------------------;
-
-(sdegeo:create-rectangle
- (position Y2 0.0  0)
- (position Y3 Xmax 0) "GaAs" "R.GaAsSub")
-
-(sdegeo:create-rectangle
- (position Y1 0.0  0)
- (position Y2 Xmax 0) "InGaAs" "R.Channel")
-
-(sdegeo:create-rectangle
- (position Y0 0.0  0)
- (position Y1 Xmax 0) "AlGaAs" "R.SpacerB")
-
-(sdegeo:create-rectangle
- (position Ym1 0.0  0)
- (position Y0  Xmax 0) "GaAs" "R.GaAsCap")
-
-(sdegeo:create-rectangle
- (position Ym2 0.0  0)
- (position Ym1 Xmax 0) "Si3N4" "R.Passivation")
-
-(sdegeo:set-default-boolean "ABA")
-(sdegeo:create-rectangle
-  (position Ym2 0.0 0)
-  (position Yg  Xsp 0) "Oxide" "R.Oxide")
-
-(define GateMetal
- (sdegeo:create-rectangle
-  (position Ym2 0.0 0)
-  (position Yg  Xg  0) "Metal" "R.GateMetal"))
-
-(define DrainMetal
- (sdegeo:create-rectangle
-  (position  Ym2 Xc   0)
-  (position  Y2  Xmax 0) "Metal" "R.DrainMetal"))
-
-;--- Contacts ---------------------------------------------------------
-(sdegeo:define-contact-set "gate"      4.0 (color:rgb 1.0 0.0 0.0) "##")
-(sdegeo:define-contact-set "drain"     4.0 (color:rgb 0.0 1.0 0.0) "##")
-(sdegeo:define-contact-set "substrate" 4.0 (color:rgb 0.5 0.0 0.5) "##")
-
-(sdegeo:set-current-contact-set "gate")
-(sdegeo:set-contact-boundary-edges GateMetal)
-(sdegeo:delete-region GateMetal)
-
-(sdegeo:set-current-contact-set "drain")
-(sdegeo:set-contact-boundary-edges DrainMetal)
-(sdegeo:delete-region DrainMetal)
-
-(sdegeo:define-2d-contact
- (find-edge-id (position Y3 0.01 0.0))
- "substrate")
-
-(sdeio:save-tdr-bnd (get-body-list) "n@node@_half_bnd.tdr")
-
-;----------------------------------------------------------------------;
-; Doping Profiles  -  identical for all mole fraction values
-;----------------------------------------------------------------------;
-
-(sdedr:define-constant-profile "Const.BG"
- "BoronActiveConcentration" 1e7)
-(sdedr:define-constant-profile-material "PlaceCD.BG"  "Const.BG" "GaAs")
-(sdedr:define-constant-profile-material "PlaceCD.BG2" "Const.BG" "AlGaAs")
-(sdedr:define-constant-profile-material "PlaceCD.BG3" "Const.BG" "InGaAs")
-
-(sdedr:define-refeval-window "BaseLine.Delta" "Line"
- (position YDelta (* Xmax -1.0) 0.0)
- (position YDelta (* Xmax  2.0) 0.0))
-(sdedr:define-gaussian-profile "Prof.Delta"
- "ArsenicActiveConcentration"
- "PeakPos" 0  "PeakVal" (* (/ SheetCharge DeltaThick) 1.12838e4)
- "Length" (* 0.5 DeltaThick)
- "Gauss"  "Factor" 0.0)
-(sdedr:define-analytical-profile-placement "Place.Delta"
- "Prof.Delta" "BaseLine.Delta" "Both" "NoReplace" "Eval")
-
-(sdedr:define-constant-profile "Const.GaAsCap"
- "ArsenicActiveConcentration" 3e18)
-(sdedr:define-constant-profile-region "PlaceCD.GaAsCap"
- "Const.GaAsCap" "R.GaAsCap")
-
-(sdedr:define-refeval-window "BaseLine.SD" "Line"
- (position Ym1 (-  Xmax (* 2 Lc)) 0.0)
- (position Ym1 (* 2 Xmax)         0.0))
-(sdedr:define-gaussian-profile "Impl.SDprof"
- "ArsenicActiveConcentration"
- "PeakPos" 0  "PeakVal" 1e19
- "ValueAtDepth" 5e17 "Depth" (* 1.75 (- Y2 Ym1))
- "Gauss"  "Factor" 0.4)
-(sdedr:define-analytical-profile-placement "Impl.Ext"
- "Impl.SDprof" "BaseLine.SD" "Negative" "NoReplace" "Eval")
-
-;----------------------------------------------------------------------;
-; Meshing  -  identical for all mole fraction values
-;----------------------------------------------------------------------;
-(sdedr:define-refinement-size "Ref.GaAsSub"
-  (/ Y3  8.0) (/ Xmax 4.0)
-  (/ Y3 16.0) (/ Xmax 8.0))
-(sdedr:define-refinement-region "RefPlace.GaAsSub"
- "Ref.GaAsSub" "R.GaAsSub")
-
-(sdedr:define-refeval-window "RWin.Cap" "Rectangle"
- (position  (- Ym1 0.01)  0.0  0.0)
- (position  Y0    XcM     0.0))
-(sdedr:define-refinement-size "Ref.Cap"
-  (/ HGaAsCap 4.0) (/ Xmax  8.0)
-  (/ HGaAsCap 6.0) (/ Xmax 16.0))
-(sdedr:define-refinement-placement "RefPlace.Cap" "Ref.Cap" "RWin.Cap")
-
-(sdedr:define-refeval-window "RWin.Spacer" "Rectangle"
- (position  Y0 0.0 0.0)
- (position  Y1 XT  0.0))
-(sdedr:define-refinement-size "Ref.Spacer"
-  (/ HSpacer 6.0) 99
-  (/ HSpacer 8.0) 66)
-(sdedr:define-refinement-placement "RefPlace.Spacer" "Ref.Spacer" "RWin.Spacer")
-
-(sdedr:define-refeval-window "MBWindow.ChannelTop" "Rectangle"
- (position (- Y1 8e-4)        XT    0.0)
- (position (* 0.5 (+ Y2 Y1))  XcM   0.0))
-(sdedr:define-multibox-size "MBSize.ChannelTop"
-  0.1 99  8e-4 66  1.5 1.0)
-(sdedr:define-multibox-placement "MBPlace.ChannelTop"
- "MBSize.ChannelTop" "MBWindow.ChannelTop")
-
-(sdedr:define-refeval-window "MBWindow.ChannelTopT" "Rectangle"
- (position (- Y1 4e-4)       0.0  0.0)
- (position (* 0.5 (+ Y2 Y1)) XT   0.0))
-(sdedr:define-multibox-size "MBSize.ChannelTopT"
-  0.05 99  4e-4 66  1.5 1.0)
-(sdedr:define-multibox-placement "MBPlace.ChannelTopT"
- "MBSize.ChannelTopT" "MBWindow.ChannelTopT")
-
-(sdedr:define-refeval-window "MBWindow.ChannelBot" "Rectangle"
- (position (* 0.5 (+ Y2 Y1))  XT    0.0)
- (position (+ Y2 8e-4)        XcM   0.0))
-(sdedr:define-multibox-size "MBSize.ChannelBot"
-  0.1 99  8e-4 66  -1.5 1.0)
-(sdedr:define-multibox-placement "MBPlace.ChannelBot"
- "MBSize.ChannelBot" "MBWindow.ChannelBot")
-
-(sdedr:define-refeval-window "MBWindow.ChannelBotT" "Rectangle"
- (position (* 0.5 (+ Y2 Y1)) 0.0  0.0)
- (position  (+ Y2 4e-4)      XT   0.0))
-(sdedr:define-multibox-size "MBSize.ChannelBotT"
-  0.05 99  4e-4 66  -1.5 1.0)
-(sdedr:define-multibox-placement "MBPlace.ChannelBotT"
- "MBSize.ChannelBotT" "MBWindow.ChannelBotT")
-
-(sdedr:define-refeval-window "MBWindow.UnderChannel" "Rectangle"
- (position Y2  0.0  0.0)
- (position Y3  XcM  0.0))
-(sdedr:define-multibox-size "MBSize.UnderChannel"
-  66 99  16e-4 66  2.0 1.0)
-(sdedr:define-multibox-placement "MBPlace.UnderChannel"
- "MBSize.UnderChannel" "MBWindow.UnderChannel")
-
-(sdedr:define-refeval-window "RWin.HeteroCap" "Rectangle"
- (position  (- Y0 3e-4) Xsp  0.0)
- (position  (+ Y0 3e-4) XcM  0.0))
-(sdedr:define-refinement-size "Ref.HeteroCap"
-  6e-4 99  8e-4 66)
-(sdedr:define-refinement-placement "RefPlace.HeteroCap"
- "Ref.HeteroCap" "RWin.HeteroCap")
-
-(sdedr:define-refeval-window "RWin.ActiveArea" "Rectangle"
- (position  (- Y0 0.01) 0.0 0.0)
- (position  (+ Y2 0.05) (+  0.5 Xsp) 0.0))
-(sdedr:define-refinement-size "Ref.ActiveArea"
-  0.025 (/ Lg 4.0)
-   0.02 (/ Lg 5.0))
-(sdedr:define-refinement-placement "RefPlace.ActiveArea"
- "Ref.ActiveArea" "RWin.ActiveArea")
-
-(sdedr:define-refeval-window "RWin.UnderGate" "Rectangle"
- (position  (- Yg 0.001) 0.0  0.0)
- (position  Y1  Xsp       0.0))
-(sdedr:define-refinement-size "Ref.UnderGate"
-  (/ (- Y1 Yg)  8.0) 99
-  (/ (- Y1 Yg) 10.0) 66)
-(sdedr:define-refinement-placement "RefPlace.UnderGate"
- "Ref.UnderGate" "RWin.UnderGate")
-
-(sdedr:define-refeval-window "MBWindow.SchottkyGate" "Rectangle"
- (position Yg          0.0   0.0)
- (position (+ Yg 0.01) Xsp   0.0))
-(sdedr:define-multibox-size "MBSize.SchottkyGate"
-  0.05 (/ Lg 10.0)  4e-4 (/ Lg 12.0)  1.5 1.0)
-(sdedr:define-multibox-placement "MBPlace.SchottkyGate"
- "MBSize.SchottkyGate" "MBWindow.SchottkyGate")
-
-(sdedr:define-refeval-window "RWin.GDCorner" "Rectangle"
- (position  Y0 (+ -0.01 Xsp) 0.0)
- (position  Y1 (+  0.01 Xsp) 0.0))
-(sdedr:define-refinement-size "Ref.GDCorner"
-  5e-3 5e-3  2e-3 2e-3)
-(sdedr:define-refinement-placement "RefPlace.GDCorner"
- "Ref.GDCorner" "RWin.GDCorner")
-
-(sdedr:define-refeval-window "RWin.RGCorner" "Rectangle"
- (position  Yg (+ -0.02 Xg) 0.0)
- (position  Y1 (+  0.02 Xg) 0.0))
-(sdedr:define-refinement-size "Ref.RGCorner"
-  99 4e-3  66 2e-3)
-(sdedr:define-refinement-placement "RefPlace.RGCorner"
- "Ref.RGCorner" "RWin.RGCorner")
-
-(sdedr:define-refeval-window "RWin.Drain" "Rectangle"
- (position          Ym1  (-  Xmax (* 2.5 Lc)) 0.0)
- (position (* 1.5 (- Y2 Ym1)) Xmax            0.0))
-(sdedr:define-refinement-size "Ref.Drain"
-  (/ (- Y2 Ym1) 4.0) (/ Lc 4.0)
-  (/ (- Y2 Ym1) 5.0) (/ Lc 5.0))
-(sdedr:define-refinement-placement "RefPlace.Drain"
- "Ref.Drain" "RWin.Drain")
-
-(sdesnmesh:axisaligned "xCuts"
-  (list
-   (+ YDelta (* 2.00 DeltaThick))
-   (+ YDelta (* 1.50 DeltaThick))
-   (+ YDelta (* 1.25 DeltaThick))
-   (+ YDelta (* 1.00 DeltaThick))
-   (+ YDelta (* 0.75 DeltaThick))
-   (+ YDelta (* 0.50 DeltaThick))
-   (+ YDelta (* 0.25 DeltaThick))
-   (+ YDelta (* 0.125 DeltaThick))
-      YDelta
-   (- YDelta (* 0.125 DeltaThick))
-   (- YDelta (* 0.25 DeltaThick))
-   (- YDelta (* 0.50 DeltaThick))
-   (- YDelta (* 0.75 DeltaThick))
-   (- YDelta (* 1.00 DeltaThick))
-   (- YDelta (* 1.25 DeltaThick))
-   (- YDelta (* 1.50 DeltaThick))
-   (- YDelta (* 2.00 DeltaThick))
-  )
-)
-
-; NOTE: SDE geometry is independent of xInGaAs.
-; You may reuse this single mesh for all mole fraction sweep points.
-; Only the paired SDevice file needs to re-run for each @xInGaAs@ value.
-(sde:build-mesh "n@node@_half_msh")
-(system:command "tdx -mtt -y -ren drain=source n@node@_half_msh n@node@_msh")
-(system:command "rm -f n@node@_half_msh.tdr")
+*----------------------------------------------------------------------*
+} *- End of Device{}
+*----------------------------------------------------------------------*
+File{
+   Output=    "@log@"
+   ACExtract= "@acplot@"
+}
+System {
+   HEMT hemt (gate=1 drain=2 source=0 substrate=0)
+   Vsource_pset vg ( 1 0 ) { dc= 0 }
+   Vsource_pset vd ( 2 0 ) { dc= 0 }
+#if @Rfb@ != 0
+   Resistor_pset Rfb (1 2) { resistance= @Rfb@ }
+#endif
+}
+Plot{
+   eDensity hDensity
+   TotalCurrent/Vector eCurrent/Vector hCurrent/Vector
+   eMobility hMobility
+   eVelocity hVelocity
+   eQuasiFermi hQuasiFermi
+   eTemperature
+   ElectricField/Vector Potential SpaceCharge
+   Doping DonorConcentration AcceptorConcentration
+   SRH Auger
+   AvalancheGeneration eAvalancheGeneration hAvalancheGeneration
+   eGradQuasiFermi/Vector hGradQuasiFermi/Vector
+   eEparallel hEparalllel
+   BandGap
+   Affinity
+   ConductionBand ValenceBand
+   xMoleFraction
+   eTrappedCharge hTrappedCharge
+   eGapStatesRecombination hGapStatesRecombination
+}
+Math{
+   Extrapolate
+   Digits=           5
+   Notdamped=        50
+   Iterations=       15
+   RelErrControl
+   ErrRef(Electron)= 1e7
+   ErrRef(Hole)=     1e4
+   RelTermMinDensity=     1e4
+   RelTermMinDensityZero= 1e7
+   Number_of_Threads= 4
+   Method=    Blocked SubMethod=   Pardiso
+   ACMethod=  Blocked ACSubMethod= Pardiso
+}
+Solve{
+   NewCurrentPrefix="Init_"
+   Coupled(Iterations= 100){ Poisson }
+   Coupled{ Poisson Electron Hole }
+   Coupled{ Poisson Electron Hole eTemperature }
+   Quasistationary(
+      InitialStep= 0.01 Increment= 1.4
+      MinStep= 1e-6 MaxStep= 0.25
+      Goal{ Parameter= vg.dc Voltage= @Vgmin@ }
+      Goal{ Parameter= vd.dc Voltage= @Vd@ }
+   ){ Coupled { Poisson Electron Hole eTemperature } }
+   NewCurrentPrefix=""
+   Quasistationary(
+      InitialStep= 0.1 Increment= 1.25
+      MinStep= 1e-6 MaxStep= 0.05
+      DoZero
+      Goal{ Parameter= vg.dc Voltage= @Vgmax@ }
+   ){ ACCoupled(
+        StartFrequency= 1e8 EndFrequency= 1e12
+        NumberOfPoints= @<nPerDecade*4+1>@ Decade
+        Node(1 2) Exclude(vg vd)
+        ACCompute( Time=(Range=(0 1) Intervals= 20) )
+      ){ Poisson Electron Hole eTemperature }
+      CurrentPlot( Time=(Range=(0 1) Intervals= 20) )
+   }
+}
