@@ -1,0 +1,369 @@
+;------------------------------------------------------------
+(sde:clear)
+;-------------------------------------------------------------------------------------
+; Unified Coordinate System
+;----------------------------------------------------------------------;
+; Definitions
+;----------------------------------------------------------------------;
+(define  HGaAsSub 0.8)
+(display "Height of GaAs substate: ") (display HGaAsSub) (display "um") 
+(newline)
+
+(define  HChannel 0.01)
+(display "Height of channel: ") (display HChannel) (display "um")
+(newline)
+
+(define  HSpacer  0.0345)
+(display "Height of spacer : ") (display HSpacer) (display "um")
+(newline)
+
+(define  YDelta   0.031)
+(display "Location of Delta-Doping layer: ") (display YDelta) (display "um")
+(newline)
+
+(define  DeltaThick 0.002)
+(display "Thickness of Delta-Doping layer: ") (display DeltaThick) (display "um")
+(newline)
+
+(define  HGaAsCap 0.03)
+(display "Height of top GaAs cap layer: ") (display HGaAsCap) (display "um")
+(newline)
+
+(define  HPass 0.05)
+(display "Height of top Pasivation layer: ") (display HPass) (display "um")
+(newline)
+
+(define  Xmax 0.8)
+(display "Distance from center to the end of the simulation domain: ") (display Xmax) (display "um")
+(newline)
+
+(define  Lg 0.25)
+(display "Gate length: ") (display Lg) (display "um")
+(newline)
+
+(define  Lc 0.05)
+(display "Contact length: ") (display Lc) (display "um")
+(newline)
+
+(define  GRecess 0.015)
+(display "Gate Recess: ") (display GRecess) (display "um")
+(newline)
+
+(define  Wsp 0.04)
+(display "Width of Oxide Spacer: ") (display Wsp) (display "um")
+(newline)
+
+(define  WTrap 0.03)
+
+(define  SheetCharge 5.4e12)
+(display "SheetCharge: ") (display SheetCharge) (display "cm-2")
+(newline)
+
+;----------------------------------------------------------------------;
+; Derived Quantities
+;----------------------------------------------------------------------;  
+(define Y0  0.0)
+(define Y1  (+ Y0  HSpacer))
+(define Y2  (+ Y1  HChannel))
+(define Y3  (+ Y2  HGaAsSub))
+(define Ym1 (- Y0  HGaAsCap))
+(define Ym2 (- Ym1 HPass))
+     
+(define Xg  (/ Lg 2.0))
+(define Xsp (+ Xg Wsp))
+(define Xgt (+ Xg WTrap))
+(define Xc  (- Xmax Lc))
+(define XcM (-  Xmax (* 2.5 Lc)))
+(define Yg  (+ Y0 GRecess))
+(define XT  0.3)
+
+;----------------------------------------------------------------------;
+; Layer System:
+;----------------------------------------------------------------------;
+
+(sdegeo:create-rectangle 
+ (position Y2 0.0  0) 
+ (position Y3 Xmax 0) "GaAs" "R.GaAsSub")
+
+(sdegeo:create-rectangle 
+ (position Y1 0.0  0) 
+ (position Y2 Xmax 0) "InGaAs" "R.Channel")
+
+(sdegeo:create-rectangle 
+ (position Y0 0.0   0) 
+ (position Y1 Xmax  0) "AlGaAs" "R.SpacerB")
+
+(sdegeo:create-rectangle 
+ (position Ym1 0.0  0) 
+ (position Y0  Xmax 0) "GaAs" "R.GaAsCap")
+
+(sdegeo:create-rectangle 
+ (position Ym2 0.0   0) 
+ (position Ym1 Xmax   0) "Si3N4" "R.Passivation")
+
+(sdegeo:set-default-boolean "ABA")
+(sdegeo:create-rectangle 
+  (position Ym2 0.0 0) 
+  (position Yg Xsp 0) "Oxide" "R.Oxide")
+
+(define GateMetal 
+ (sdegeo:create-rectangle 
+  (position Ym2 0.0 0) 
+  (position Yg  Xg  0) "Metal" "R.GateMetal"))
+
+(define DrainMetal 
+ (sdegeo:create-rectangle 
+  (position  Ym2 Xc   0) 
+  (position  Y2 Xmax  0) "Metal" "R.DrainMetal"))
+
+;--- Contacts ---------------------------------------------------------
+(sdegeo:define-contact-set "gate"      4.0  (color:rgb 1.0 0.0 0.0 ) "##" )
+(sdegeo:define-contact-set "drain"     4.0  (color:rgb 0.0 1.0 0.0 ) "##" )
+(sdegeo:define-contact-set "substrate" 4.0  (color:rgb 0.5 0.0 0.5 ) "##" )
+
+(sdegeo:set-current-contact-set "gate")
+(sdegeo:set-contact-boundary-edges GateMetal) 
+(sdegeo:delete-region GateMetal) 
+
+(sdegeo:set-current-contact-set "drain")
+(sdegeo:set-contact-boundary-edges DrainMetal) 
+(sdegeo:delete-region DrainMetal) 
+
+(sdegeo:define-2d-contact 
+ (find-edge-id (position Y3 0.01 0.0))
+ "substrate" )
+
+;--- Saving BND file --------------------------------------------------
+; Saving BND file
+(sdeio:save-tdr-bnd (get-body-list) "n@node@_half_bnd.tdr")
+
+;----------------------------------------------------------------------
+; Profiles:
+; - Substrate
+(sdedr:define-constant-profile "Const.BG" 
+ "BoronActiveConcentration" 1e7 )
+(sdedr:define-constant-profile-material  "PlaceCD.BG" 
+ "Const.BG" "GaAs" )
+(sdedr:define-constant-profile-material  "PlaceCD.BG2" 
+ "Const.BG" "AlGaAs" )
+(sdedr:define-constant-profile-material  "PlaceCD.BG3" 
+ "Const.BG" "InGaAs" )
+
+;(sdedr:define-constant-profile "Const.Delta" 
+; "ArsenicActiveConcentration" ND )
+;(sdedr:define-constant-profile-region  "PlaceCD.Delta" 
+; "Const.Delta" "R.Delta" )
+
+(sdedr:define-refeval-window "BaseLine.Delta" "Line"  
+ (position YDelta (* Xmax -1.0) 0.0)  
+ (position YDelta (* Xmax  2.0) 0.0) )
+(sdedr:define-gaussian-profile "Prof.Delta"
+ "ArsenicActiveConcentration"
+ "PeakPos" 0  "PeakVal" (* (/ SheetCharge DeltaThick) 1.12838e4)
+ "Length" (* 0.5 DeltaThick)
+ "Gauss"  "Factor" 0.0
+)
+(sdedr:define-analytical-profile-placement "Place.Delta" 
+ "Prof.Delta" "BaseLine.Delta" "Both" "NoReplace" "Eval")
+
+(sdedr:define-constant-profile "Const.GaAsCap" 
+ "ArsenicActiveConcentration" 3e18 )
+(sdedr:define-constant-profile-region  "PlaceCD.GaAsCap" 
+ "Const.GaAsCap" "R.GaAsCap" )
+
+; - Source/Drain Implants
+(sdedr:define-refeval-window "BaseLine.SD" "Line"  
+ (position Ym1 (-  Xmax (* 2 Lc)) 0.0)  
+ (position Ym1 (* 2 Xmax)         0.0) )
+(sdedr:define-gaussian-profile "Impl.SDprof"
+ "ArsenicActiveConcentration"
+ "PeakPos" 0  "PeakVal" 1e19
+ "ValueAtDepth" 5e17 "Depth" (* 1.75 (- Y2 Ym1))
+ "Gauss"  "Factor" 0.4
+)
+(sdedr:define-analytical-profile-placement "Impl.Ext" 
+ "Impl.SDprof" "BaseLine.SD" "Negative" "NoReplace" "Eval")
+
+;- Meshing 
+;----------------------------------------------------------------------#
+(sdedr:define-refinement-size "Ref.GaAsSub" 
+  (/ Y3  8.0) (/ Xmax 4.0)   
+  (/ Y3 16.0) (/ Xmax 8.0)  )
+(sdedr:define-refinement-region "RefPlace.GaAsSub" 
+ "Ref.GaAsSub" "R.GaAsSub" )
+
+(sdedr:define-refeval-window "RWin.Cap" 
+ "Rectangle"  
+ (position  (- Ym1 0.01)  0.0  0.0) 
+ (position  Y0    XcM           0.0) )
+(sdedr:define-refinement-size "Ref.Cap" 
+  (/ HGaAsCap 4.0) (/ Xmax  8.0)  
+  (/ HGaAsCap 6.0)  (/ Xmax 16.0) )
+(sdedr:define-refinement-placement "RefPlace.Cap" 
+ "Ref.Cap" "RWin.Cap" )
+
+(sdedr:define-refeval-window "RWin.Spacer" 
+ "Rectangle"  
+ (position  Y0 0.0 0.0) 
+ (position  Y1 XT  0.0) )
+(sdedr:define-refinement-size "Ref.Spacer" 
+  (/ HSpacer 6.0) 99  
+  (/ HSpacer 8.0) 66  )
+(sdedr:define-refinement-placement "RefPlace.Spacer" 
+ "Ref.Spacer" "RWin.Spacer" )
+
+(sdedr:define-refeval-window "MBWindow.ChannelTop" 
+ "Rectangle"  
+ (position (- Y1 8e-4)        XT     0.0) 
+ (position (* 0.5 (+ Y2 Y1))  XcM   0.0) )
+(sdedr:define-multibox-size "MBSize.ChannelTop" 
+  0.1 99  
+  8e-4 66  
+  1.5 1.0 )
+(sdedr:define-multibox-placement "MBPlace.ChannelTop" 
+ "MBSize.ChannelTop"  "MBWindow.ChannelTop" )
+
+(sdedr:define-refeval-window "MBWindow.ChannelTopT" 
+ "Rectangle"  
+ (position (- Y1 4e-4)      0.0   0.0) 
+ (position (* 0.5 (+ Y2 Y1)) XT   0.0) )
+(sdedr:define-multibox-size "MBSize.ChannelTopT" 
+  0.05 99 
+  4e-4 66  
+  1.5 1.0 )
+(sdedr:define-multibox-placement "MBPlace.ChannelTopT" 
+ "MBSize.ChannelTopT"  "MBWindow.ChannelTopT" )
+
+(sdedr:define-refeval-window "MBWindow.ChannelBot" 
+ "Rectangle"  
+ (position (* 0.5 (+ Y2 Y1))  XT      0.0) 
+ (position (+ Y2 8e-4)   XcM 0.0) )
+(sdedr:define-multibox-size "MBSize.ChannelBot" 
+  0.1 99 
+  8e-4 66   
+  -1.5 1.0 )
+(sdedr:define-multibox-placement "MBPlace.ChannelBot" 
+ "MBSize.ChannelBot"  "MBWindow.ChannelBot" )
+
+(sdedr:define-refeval-window "MBWindow.ChannelBotT" 
+ "Rectangle"  
+ (position (* 0.5 (+ Y2 Y1)) 0.0  0.0) 
+ (position  (+ Y2 4e-4)     XT 0.0) )
+(sdedr:define-multibox-size "MBSize.ChannelBotT" 
+  0.05 99 
+  4e-4 66   
+  -1.5 1.0)
+(sdedr:define-multibox-placement "MBPlace.ChannelBotT" 
+ "MBSize.ChannelBotT"  "MBWindow.ChannelBotT" )
+
+(sdedr:define-refeval-window "MBWindow.UnderChannel" 
+ "Rectangle"  
+ (position Y2  0.0 0.0) 
+ (position Y3 XcM 0.0) )
+(sdedr:define-multibox-size "MBSize.UnderChannel" 
+  66 99  
+  16e-4 66 
+  2.0 1.0 )
+(sdedr:define-multibox-placement "MBPlace.UnderChannel" 
+ "MBSize.UnderChannel"  "MBWindow.UnderChannel" )
+
+(sdedr:define-refeval-window "RWin.HeteroCap" 
+ "Rectangle"  
+ (position  (- Y0 3e-4) Xsp  0.0) 
+ (position  (+ Y0 3e-4) XcM  0.0) )
+(sdedr:define-refinement-size "Ref.HeteroCap" 
+  6e-4 99 
+  8e-4 66 )
+(sdedr:define-refinement-placement "RefPlace.HeteroCap" 
+ "Ref.HeteroCap" "RWin.HeteroCap" )
+
+(sdedr:define-refeval-window "RWin.ActiveArea" 
+ "Rectangle"  
+ (position  (- Y0 0.01) 0.0 0.0) 
+ (position  (+ Y2 0.05) (+  0.5 Xsp) 0.0) )
+(sdedr:define-refinement-size "Ref.ActiveArea" 
+  0.025 (/ Lg 4.0)  
+   0.02 (/ Lg 5.0) )
+(sdedr:define-refinement-placement "RefPlace.ActiveArea" 
+ "Ref.ActiveArea" "RWin.ActiveArea" )
+
+(sdedr:define-refeval-window "RWin.UnderGate" 
+ "Rectangle"  
+ (position  (- Yg 0.001) 0.0 0.0) 
+ (position  Y1  Xsp           0.0) )
+(sdedr:define-refinement-size "Ref.UnderGate" 
+  (/ (- Y1 Yg)  8.0) 99 
+  (/ (- Y1 Yg) 10.0) 66)
+(sdedr:define-refinement-placement "RefPlace.UnderGate" 
+ "Ref.UnderGate" "RWin.UnderGate")
+
+(sdedr:define-refeval-window "MBWindow.SchottkyGate" 
+ "Rectangle"  
+ (position Yg     0.0        0.0) 
+ (position (+ Yg 0.01) Xsp  0.0))
+(sdedr:define-multibox-size "MBSize.SchottkyGate" 
+  0.05 (/ Lg 10.0) 
+   4e-4 (/ Lg 12.0)
+  1.5 1.0 )
+(sdedr:define-multibox-placement "MBPlace.SchottkyGate" 
+ "MBSize.SchottkyGate"  "MBWindow.SchottkyGate" )
+
+(sdedr:define-refeval-window "RWin.GDCorner" 
+ "Rectangle"  
+ (position  Y0 (+ -0.01 Xsp)  0.0) 
+ (position  Y1 (+  0.01 Xsp) 0.0) )
+(sdedr:define-refinement-size "Ref.GDCorner" 
+  5e-3 5e-3
+  2e-3 2e-3)
+(sdedr:define-refinement-placement "RefPlace.GDCorner" 
+ "Ref.GDCorner" "RWin.GDCorner" )
+
+(sdedr:define-refeval-window "RWin.RGCorner" 
+ "Rectangle"  
+ (position  Yg (+ -0.02 Xg)  0.0) 
+ (position  Y1 (+  0.02 Xg)  0.0) )
+(sdedr:define-refinement-size "Ref.RGCorner" 
+  99 4e-3 
+  66 2e-3 )
+(sdedr:define-refinement-placement "RefPlace.RGCorner" 
+ "Ref.RGCorner" "RWin.RGCorner" )
+
+(sdedr:define-refeval-window "RWin.Drain" 
+ "Rectangle"  
+ (position            Ym1   (-  Xmax (* 2.5 Lc))  0.0) 
+ (position         (* 1.5 (- Y2 Ym1)) Xmax       0.0))
+(sdedr:define-refinement-size "Ref.Drain" 
+  (/ (- Y2 Ym1) 4.0) (/ Lc 4.0) 
+  (/ (- Y2 Ym1) 5.0) (/ Lc 5.0) )
+(sdedr:define-refinement-placement "RefPlace.Drain"
+ "Ref.Drain" "RWin.Drain")
+
+(sdesnmesh:axisaligned "xCuts" 
+  (list
+   (+ YDelta (* 2.00 DeltaThick)) 
+   (+ YDelta (* 1.50 DeltaThick)) 
+   (+ YDelta (* 1.25 DeltaThick)) 
+   (+ YDelta (* 1.00 DeltaThick)) 
+   (+ YDelta (* 0.75 DeltaThick)) 
+   (+ YDelta (* 0.50 DeltaThick)) 
+   (+ YDelta (* 0.25 DeltaThick)) 
+   (+ YDelta (* 0.125 DeltaThick)) 
+      YDelta 
+   (- YDelta (* 0.125 DeltaThick)) 
+   (- YDelta (* 0.25 DeltaThick)) 
+   (- YDelta (* 0.50 DeltaThick)) 
+   (- YDelta (* 0.75 DeltaThick)) 
+   (- YDelta (* 1.00 DeltaThick)) 
+   (- YDelta (* 1.25 DeltaThick)) 
+   (- YDelta (* 1.50 DeltaThick)) 
+   (- YDelta (* 2.00 DeltaThick)) 
+  )
+)
+
+;----------------------------------------------------------------------
+; Build Mesh 
+(sde:build-mesh "n@node@_half_msh")
+
+(system:command "tdx -mtt -y -ren drain=source n@node@_half_msh n@node@_msh")
+(system:command "rm -f n@node@_half_msh.tdr")
+
