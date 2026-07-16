@@ -1,0 +1,563 @@
+;------------------------------------------------------------
+(sde:clear)
+;-------------------------------------------------------------------------------------
+; InGaAs HEMT  -  SDE structure file
+; Substrate variant : C-DOPED lower 0.5 um GaAs
+;
+; Workbench parameters used in this file
+;   @C_Conc@  - Carbon acceptor doping in lower substrate [cm^-3]
+;               Typical range : 1e15 to 5e16
+;               (Trap concentrations @C_Trap1_Conc@ and @C_Trap2_Conc@
+;                are physics quantities; they live only in the paired
+;                SDevice file and do NOT affect geometry or meshing.)
+;----------------------------------------------------------------------;
+; Definitions
+;----------------------------------------------------------------------;
+(define  HGaAsSub   0.8)
+(display "Height of GaAs substrate: ") (display HGaAsSub) (display "um") (newline)
+
+(define  HGaAsUpper 0.3)   ; upper buffer  - unchanged
+(define  HGaAsLower 0.5)   ; lower region  - C-doped via @C_Conc@
+
+(define  HChannel   0.01)
+(display "Height of channel: ") (display HChannel) (display "um") (newline)
+
+(define  HSpacer    0.0345)
+(display "Height of spacer: ") (display HSpacer) (display "um") (newline)
+
+(define  YDelta     0.031)
+(display "Location of Delta-Doping layer: ") (display YDelta) (display "um") (newline)
+
+(define  DeltaThick 0.002)
+(display "Thickness of Delta-Doping layer: ") (display DeltaThick) (display "um") (newline)
+
+(define  HGaAsCap   0.03)
+(display "Height of GaAs cap: ") (display HGaAsCap) (display "um") (newline)
+
+(define  HPass      0.05)
+(display "Height of passivation: ") (display HPass) (display "um") (newline)
+
+(define  Xmax 0.8)
+(define  Lg   0.25)
+(define  Lc   0.05)
+(define  GRecess 0.015)
+(define  Wsp  0.04)
+(define  WTrap 0.03)
+(define  SheetCharge 5.4e12)
+(display "SheetCharge: ") (display SheetCharge) (display "cm-2") (newline)
+
+;--- Carbon doping from Workbench -------------------------------------
+(define C_Conc @C_Conc@)
+(display "C doping lower substrate: ") (display C_Conc) (display "cm-3") (newline)
+
+;----------------------------------------------------------------------;
+; Derived Quantities
+;----------------------------------------------------------------------;
+(define Y0   0.0)
+(define Y1   (+ Y0  HSpacer))
+(define Y2   (+ Y1  HChannel))
+(define Y2u  (+ Y2  HGaAsUpper))   ; split boundary upper/lower substrate
+(define Y3   (+ Y2  HGaAsSub))
+(define Ym1  (- Y0  HGaAsCap))
+(define Ym2  (- Ym1 HPass))
+
+(define Xg   (/ Lg 2.0))
+(define Xsp  (+ Xg Wsp))
+(define Xgt  (+ Xg WTrap))
+(define Xc   (- Xmax Lc))
+(define XcM  (-  Xmax (* 2.5 Lc)))
+(define Yg   (+ Y0 GRecess))
+(define XT   0.3)
+
+;----------------------------------------------------------------------;
+; Layer System
+;----------------------------------------------------------------------;
+
+; Upper buffer 0.3 um - background doping only
+(sdegeo:create-rectangle
+ (position Y2  0.0  0)
+ (position Y2u Xmax 0) "GaAs" "R.GaAsUpper")
+
+; Lower substrate 0.5 um - Carbon doped (@C_Conc@)
+(sdegeo:create-rectangle
+ (position Y2u 0.0  0)
+ (position Y3  Xmax 0) "GaAs" "R.GaAsLower")
+
+(sdegeo:create-rectangle
+ (position Y1 0.0  0)
+ (position Y2 Xmax 0) "InGaAs" "R.Channel")
+
+(sdegeo:create-rectangle
+ (position Y0 0.0  0)
+ (position Y1 Xmax 0) "AlGaAs" "R.SpacerB")
+
+(sdegeo:create-rectangle
+ (position Ym1 0.0  0)
+ (position Y0  Xmax 0) "GaAs" "R.GaAsCap")
+
+(sdegeo:create-rectangle
+ (position Ym2 0.0  0)
+ (position Ym1 Xmax 0) "Si3N4" "R.Passivation")
+
+(sdegeo:set-default-boolean "ABA")
+(sdegeo:create-rectangle
+  (position Ym2 0.0 0)
+  (position Yg  Xsp 0) "Oxide" "R.Oxide")
+
+(define GateMetal
+ (sdegeo:create-rectangle
+  (position Ym2 0.0 0)
+  (position Yg  Xg  0) "Metal" "R.GateMetal"))
+
+(define DrainMetal
+ (sdegeo:create-rectangle
+  (position  Ym2 Xc   0)
+  (position  Y2  Xmax 0) "Metal" "R.DrainMetal"))
+
+;--- Contacts ---------------------------------------------------------
+(sdegeo:define-contact-set "gate"      4.0 (color:rgb 1.0 0.0 0.0) "##")
+(sdegeo:define-contact-set "drain"     4.0 (color:rgb 0.0 1.0 0.0) "##")
+(sdegeo:define-contact-set "substrate" 4.0 (color:rgb 0.5 0.0 0.5) "##")
+
+(sdegeo:set-current-contact-set "gate")
+(sdegeo:set-contact-boundary-edges GateMetal)
+(sdegeo:delete-region GateMetal)
+
+(sdegeo:set-current-contact-set "drain")
+(sdegeo:set-contact-boundary-edges DrainMetal)
+(sdegeo:delete-region DrainMetal)
+
+(sdegeo:define-2d-contact
+ (find-edge-id (position Y3 0.01 0.0))
+ "substrate")
+
+(sdeio:save-tdr-bnd (get-body-list) "n@node@_half_bnd.tdr")
+
+;----------------------------------------------------------------------;
+; Doping Profiles
+;----------------------------------------------------------------------;
+
+; Background intrinsic level for all materials
+(sdedr:define-constant-profile "Const.BG"
+ "BoronActiveConcentration" 1e7)
+(sdedr:define-constant-profile-material "PlaceCD.BG"  "Const.BG" "GaAs")
+(sdedr:define-constant-profile-material "PlaceCD.BG2" "Const.BG" "AlGaAs")
+(sdedr:define-constant-profile-material "PlaceCD.BG3" "Const.BG" "InGaAs")
+
+; Carbon acceptor doping in lower 0.5 um substrate
+; C_As in GaAs = shallow acceptor, used here for high-resistivity buffer
+(sdedr:define-constant-profile "Const.CDope"
+ "BoronActiveConcentration" C_Conc)
+(sdedr:define-constant-profile-region "PlaceCD.CLower"
+ "Const.CDope" "R.GaAsLower")
+
+; Delta-doping in AlGaAs spacer
+(sdedr:define-refeval-window "BaseLine.Delta" "Line"
+ (position YDelta (* Xmax -1.0) 0.0)
+ (position YDelta (* Xmax  2.0) 0.0))
+(sdedr:define-gaussian-profile "Prof.Delta"
+ "ArsenicActiveConcentration"
+ "PeakPos" 0  "PeakVal" (* (/ SheetCharge DeltaThick) 1.12838e4)
+ "Length" (* 0.5 DeltaThick)
+ "Gauss"  "Factor" 0.0)
+(sdedr:define-analytical-profile-placement "Place.Delta"
+ "Prof.Delta" "BaseLine.Delta" "Both" "NoReplace" "Eval")
+
+; GaAs cap n+
+(sdedr:define-constant-profile "Const.GaAsCap"
+ "ArsenicActiveConcentration" 3e18)
+(sdedr:define-constant-profile-region "PlaceCD.GaAsCap"
+ "Const.GaAsCap" "R.GaAsCap")
+
+; Source/Drain implants
+(sdedr:define-refeval-window "BaseLine.SD" "Line"
+ (position Ym1 (-  Xmax (* 2 Lc)) 0.0)
+ (position Ym1 (* 2 Xmax)         0.0))
+(sdedr:define-gaussian-profile "Impl.SDprof"
+ "ArsenicActiveConcentration"
+ "PeakPos" 0  "PeakVal" 1e19
+ "ValueAtDepth" 5e17 "Depth" (* 1.75 (- Y2 Ym1))
+ "Gauss"  "Factor" 0.4)
+(sdedr:define-analytical-profile-placement "Impl.Ext"
+ "Impl.SDprof" "BaseLine.SD" "Negative" "NoReplace" "Eval")
+
+;----------------------------------------------------------------------;
+; Meshing
+;----------------------------------------------------------------------;
+(sdedr:define-refinement-size "Ref.GaAsSub"
+  (/ Y3  8.0) (/ Xmax 4.0)
+  (/ Y3 16.0) (/ Xmax 8.0))
+(sdedr:define-refinement-region "RefPlace.GaAsUpper"
+ "Ref.GaAsSub" "R.GaAsUpper")
+(sdedr:define-refinement-region "RefPlace.GaAsLower"
+ "Ref.GaAsSub" "R.GaAsLower")
+
+(sdedr:define-refeval-window "RWin.Cap" "Rectangle"
+ (position  (- Ym1 0.01)  0.0  0.0)
+ (position  Y0    XcM     0.0))
+(sdedr:define-refinement-size "Ref.Cap"
+  (/ HGaAsCap 4.0) (/ Xmax  8.0)
+  (/ HGaAsCap 6.0) (/ Xmax 16.0))
+(sdedr:define-refinement-placement "RefPlace.Cap" "Ref.Cap" "RWin.Cap")
+
+(sdedr:define-refeval-window "RWin.Spacer" "Rectangle"
+ (position  Y0 0.0 0.0)
+ (position  Y1 XT  0.0))
+(sdedr:define-refinement-size "Ref.Spacer"
+  (/ HSpacer 6.0) 99
+  (/ HSpacer 8.0) 66)
+(sdedr:define-refinement-placement "RefPlace.Spacer" "Ref.Spacer" "RWin.Spacer")
+
+(sdedr:define-refeval-window "MBWindow.ChannelTop" "Rectangle"
+ (position (- Y1 8e-4)        XT    0.0)
+ (position (* 0.5 (+ Y2 Y1))  XcM   0.0))
+(sdedr:define-multibox-size "MBSize.ChannelTop"
+  0.1 99  8e-4 66  1.5 1.0)
+(sdedr:define-multibox-placement "MBPlace.ChannelTop"
+ "MBSize.ChannelTop" "MBWindow.ChannelTop")
+
+(sdedr:define-refeval-window "MBWindow.ChannelTopT" "Rectangle"
+ (position (- Y1 4e-4)       0.0  0.0)
+ (position (* 0.5 (+ Y2 Y1)) XT   0.0))
+(sdedr:define-multibox-size "MBSize.ChannelTopT"
+  0.05 99  4e-4 66  1.5 1.0)
+(sdedr:define-multibox-placement "MBPlace.ChannelTopT"
+ "MBSize.ChannelTopT" "MBWindow.ChannelTopT")
+
+(sdedr:define-refeval-window "MBWindow.ChannelBot" "Rectangle"
+ (position (* 0.5 (+ Y2 Y1))  XT    0.0)
+ (position (+ Y2 8e-4)        XcM   0.0))
+(sdedr:define-multibox-size "MBSize.ChannelBot"
+  0.1 99  8e-4 66  -1.5 1.0)
+(sdedr:define-multibox-placement "MBPlace.ChannelBot"
+ "MBSize.ChannelBot" "MBWindow.ChannelBot")
+
+(sdedr:define-refeval-window "MBWindow.ChannelBotT" "Rectangle"
+ (position (* 0.5 (+ Y2 Y1)) 0.0  0.0)
+ (position  (+ Y2 4e-4)      XT   0.0))
+(sdedr:define-multibox-size "MBSize.ChannelBotT"
+  0.05 99  4e-4 66  -1.5 1.0)
+(sdedr:define-multibox-placement "MBPlace.ChannelBotT"
+ "MBSize.ChannelBotT" "MBWindow.ChannelBotT")
+
+(sdedr:define-refeval-window "MBWindow.UnderChannel" "Rectangle"
+ (position Y2  0.0  0.0)
+ (position Y3  XcM  0.0))
+(sdedr:define-multibox-size "MBSize.UnderChannel"
+  66 99  16e-4 66  2.0 1.0)
+(sdedr:define-multibox-placement "MBPlace.UnderChannel"
+ "MBSize.UnderChannel" "MBWindow.UnderChannel")
+
+; Fine mesh at the C-doping boundary Y2u
+(sdedr:define-refeval-window "RWin.CSplit" "Rectangle"
+ (position (- Y2u 0.02) 0.0   0.0)
+ (position (+ Y2u 0.02) Xmax  0.0))
+(sdedr:define-refinement-size "Ref.CSplit"
+  5e-3 (/ Xmax 4.0)
+  2e-3 (/ Xmax 8.0))
+(sdedr:define-refinement-placement "RefPlace.CSplit"
+ "Ref.CSplit" "RWin.CSplit")
+
+(sdedr:define-refeval-window "RWin.HeteroCap" "Rectangle"
+ (position  (- Y0 3e-4) Xsp  0.0)
+ (position  (+ Y0 3e-4) XcM  0.0))
+(sdedr:define-refinement-size "Ref.HeteroCap"
+  6e-4 99  8e-4 66)
+(sdedr:define-refinement-placement "RefPlace.HeteroCap"
+ "Ref.HeteroCap" "RWin.HeteroCap")
+
+(sdedr:define-refeval-window "RWin.ActiveArea" "Rectangle"
+ (position  (- Y0 0.01) 0.0 0.0)
+ (position  (+ Y2 0.05) (+  0.5 Xsp) 0.0))
+(sdedr:define-refinement-size "Ref.ActiveArea"
+  0.025 (/ Lg 4.0)
+   0.02 (/ Lg 5.0))
+(sdedr:define-refinement-placement "RefPlace.ActiveArea"
+ "Ref.ActiveArea" "RWin.ActiveArea")
+
+(sdedr:define-refeval-window "RWin.UnderGate" "Rectangle"
+ (position  (- Yg 0.001) 0.0  0.0)
+ (position  Y1  Xsp       0.0))
+(sdedr:define-refinement-size "Ref.UnderGate"
+  (/ (- Y1 Yg)  8.0) 99
+  (/ (- Y1 Yg) 10.0) 66)
+(sdedr:define-refinement-placement "RefPlace.UnderGate"
+ "Ref.UnderGate" "RWin.UnderGate")
+
+(sdedr:define-refeval-window "MBWindow.SchottkyGate" "Rectangle"
+ (position Yg          0.0   0.0)
+ (position (+ Yg 0.01) Xsp   0.0))
+(sdedr:define-multibox-size "MBSize.SchottkyGate"
+  0.05 (/ Lg 10.0)  4e-4 (/ Lg 12.0)  1.5 1.0)
+(sdedr:define-multibox-placement "MBPlace.SchottkyGate"
+ "MBSize.SchottkyGate" "MBWindow.SchottkyGate")
+
+(sdedr:define-refeval-window "RWin.GDCorner" "Rectangle"
+ (position  Y0 (+ -0.01 Xsp) 0.0)
+ (position  Y1 (+  0.01 Xsp) 0.0))
+(sdedr:define-refinement-size "Ref.GDCorner"
+  5e-3 5e-3  2e-3 2e-3)
+(sdedr:define-refinement-placement "RefPlace.GDCorner"
+ "Ref.GDCorner" "RWin.GDCorner")
+
+(sdedr:define-refeval-window "RWin.RGCorner" "Rectangle"
+ (position  Yg (+ -0.02 Xg) 0.0)
+ (position  Y1 (+  0.02 Xg) 0.0))
+(sdedr:define-refinement-size "Ref.RGCorner"
+  99 4e-3  66 2e-3)
+(sdedr:define-refinement-placement "RefPlace.RGCorner"
+ "Ref.RGCorner" "RWin.RGCorner")
+
+(sdedr:define-refeval-window "RWin.Drain" "Rectangle"
+ (position          Ym1  (-  Xmax (* 2.5 Lc)) 0.0)
+ (position (* 1.5 (- Y2 Ym1)) Xmax            0.0))
+(sdedr:define-refinement-size "Ref.Drain"
+  (/ (- Y2 Ym1) 4.0) (/ Lc 4.0)
+  (/ (- Y2 Ym1) 5.0) (/ Lc 5.0))
+(sdedr:define-refinement-placement "RefPlace.Drain"
+ "Ref.Drain" "RWin.Drain")
+
+(sdesnmesh:axisaligned "xCuts"
+  (list
+   (+ YDelta (* 2.00 DeltaThick))
+   (+ YDelta (* 1.50 DeltaThick))
+   (+ YDelta (* 1.25 DeltaThick))
+   (+ YDelta (* 1.00 DeltaThick))
+   (+ YDelta (* 0.75 DeltaThick))
+   (+ YDelta (* 0.50 DeltaThick))
+   (+ YDelta (* 0.25 DeltaThick))
+   (+ YDelta (* 0.125 DeltaThick))
+      YDelta
+   (- YDelta (* 0.125 DeltaThick))
+   (- YDelta (* 0.25 DeltaThick))
+   (- YDelta (* 0.50 DeltaThick))
+   (- YDelta (* 0.75 DeltaThick))
+   (- YDelta (* 1.00 DeltaThick))
+   (- YDelta (* 1.25 DeltaThick))
+   (- YDelta (* 1.50 DeltaThick))
+   (- YDelta (* 2.00 DeltaThick))
+   Y2u    ; explicit cut at the upper/lower substrate boundary
+  )
+)
+
+(sde:build-mesh "n@node@_half_msh")
+(system:command "tdx -mtt -y -ren drain=source n@node@_half_msh n@node@_msh")
+(system:command "rm -f n@node@_half_msh.tdr")
+
+
+
+
+
+
+*----------------------------------------------------------------------*
+* SDevice input  -  InGaAs HEMT with C-DOPED lower GaAs substrate
+*
+* ======================================================================
+* Workbench parameters used in this file
+* ======================================================================
+*
+*  @C_Conc@        - Carbon acceptor background doping in R.GaAsLower
+*                    [cm^-3]  Range: 1e15 to 5e16
+*                    Must match the value used in the paired SDE node.
+*
+*  @C_Trap1_Conc@  - Concentration of Trap 1 in R.GaAsLower
+*                    C_As hole-trap acceptor at EV+0.40 eV
+*                    [cm^-3]  Suggested range: 1e14 to @C_Conc@
+*                    Reference: Fujisawa et al., J.Appl.Phys. 82 (1997)
+*
+*  @C_Trap2_Conc@  - Concentration of Trap 2 in R.GaAsLower
+*                    C-DX / mid-gap compensation donor at EV+0.75 eV
+*                    [cm^-3]  Suggested range: 1e13 to 0.2*@C_Conc@
+*                    Reference: Martin et al., Phys.Rev.B 16 (1977)
+*
+*  @C_UpperTrap_Conc@ - Concentration of the original substrate trap
+*                       in R.GaAsUpper (donor at 0.61 eV from CB)
+*                       [cm^-3]  Baseline value from original code: 1e16
+*                       Reference: original device model
+*
+* Physical background (C-doped GaAs):
+*   Carbon substituting on the As site (C_As) acts as a shallow
+*   acceptor (E_A ~ EV+0.026 eV).  At concentrations relevant for
+*   high-resistivity buffers (1e15-5e16 cm^-3) it also introduces
+*   deeper states through C-As complexes and DX-like centres:
+*     Trap 1  C_As hole trap      EV+0.40 eV  (Fujisawa 1997)
+*     Trap 2  C-DX mid-gap donor  EV+0.75 eV  (Martin 1977,
+*                                               Makram-Ebeid 1982)
+* ======================================================================
+*----------------------------------------------------------------------*
+Device HEMT {
+*----------------------------------------------------------------------*
+Electrode{
+   { Name="source"    Voltage= 0.0 Resistor= 150 }
+   { Name="drain"     Voltage= 0.0 Resistor= 150 }
+   { Name="gate"      Voltage= 0.0 Schottky Barrier= 0.9
+       eRecVelocity= 1.e7 hRecVelocity= 1.e7 }
+   { Name="substrate" Voltage= 0.0 Resistor= 1e3 }
+}
+File{
+   Grid=      "@tdr@"
+   Parameter= "@parameter@"
+   Current=   "@plot@"
+   Plot=      "@tdrdat@"
+}
+Physics {
+   Hydrodynamic( eTemperature )
+   Mobility(
+      eHighFieldSaturation
+   )
+   EffectiveIntrinsicDensity( NoBandGapNarrowing )
+   Recombination(
+      SRH Auger Radiative
+   )
+}
+Physics( Material="GaAs" ){
+   Mobility( Dopingdependence )
+}
+Physics( Material="AlGaAs" ){
+   MoleFraction( xFraction= 0.30 Grading= 0)
+}
+Physics( Material="InGaAs"){
+   MoleFraction( xFraction= 0.75 Grading= 0)
+}
+
+*----------------------------------------------------------------------*
+* Upper buffer trap (R.GaAsUpper - unchanged from original code)
+* Concentration @C_UpperTrap_Conc@ is a sweepable Workbench parameter.
+* Baseline: 1e16 cm^-3.  Energy: 0.61 eV from conduction band.
+*----------------------------------------------------------------------*
+Physics( Region="R.GaAsUpper" ){
+    Traps(
+       (Donor
+        Conc=      @C_UpperTrap_Conc@
+        EnergyMid= 0.61  fromCondBand
+        eXsection= 2.5e-18
+        hXsection= 2.5e-16)
+    )
+}
+
+*----------------------------------------------------------------------*
+* C-doped lower substrate traps (R.GaAsLower)
+*
+* Trap 1 - C_As shallow acceptor / hole trap
+*   Type      : Acceptor
+*   Energy    : EV + 0.40 eV  =>  EnergyMid = 1.42 - 0.40 = 1.02 eV fromCondBand
+*   eXsection : 1.0e-17 cm^2  (small - C_As is primarily a hole trap)
+*   hXsection : 1.0e-14 cm^2
+*   Conc      : @C_Trap1_Conc@  (independent Workbench sweep parameter)
+*   Ref       : Fujisawa et al., J.Appl.Phys. 82, 2063 (1997)
+*
+* Trap 2 - C-DX / mid-gap compensation donor
+*   Type      : Donor
+*   Energy    : EV + 0.75 eV  =>  EnergyMid = 1.42 - 0.75 = 0.67 eV fromCondBand
+*   eXsection : 5.0e-16 cm^2
+*   hXsection : 5.0e-18 cm^2
+*   Conc      : @C_Trap2_Conc@  (independent Workbench sweep parameter)
+*   Ref       : Martin et al., Phys.Rev.B 16, 2082 (1977)
+*               Makram-Ebeid & Lannoo, Phys.Rev.B 25, 6406 (1982)
+*----------------------------------------------------------------------*
+Physics( Region="R.GaAsLower" ){
+    Traps(
+
+       * Trap 1 : C_As hole-trap acceptor  (EV + 0.40 eV)
+       (Acceptor
+        Conc=      @C_Trap1_Conc@
+        EnergyMid= 1.02  fromCondBand
+        eXsection= 1.0e-17
+        hXsection= 1.0e-14)
+
+       * Trap 2 : C-DX mid-gap donor  (EV + 0.75 eV)
+       (Donor
+        Conc=      @C_Trap2_Conc@
+        EnergyMid= 0.67  fromCondBand
+        eXsection= 5.0e-16
+        hXsection= 5.0e-18)
+
+    )
+}
+
+*----------------------------------------------------------------------*
+} *- End of Device{}
+*----------------------------------------------------------------------*
+File{
+   Output=    "@log@"
+   ACExtract= "@acplot@"
+}
+System {
+   HEMT hemt (gate=1 drain=2 source=0 substrate=0)
+   Vsource_pset vg ( 1 0 ) { dc= 0 }
+   Vsource_pset vd ( 2 0 ) { dc= 0 }
+#if @Rfb@ != 0
+   Resistor_pset Rfb (1 2) { resistance= @Rfb@ }
+#endif
+}
+Plot{
+*-- Density and Currents
+   eDensity hDensity
+   TotalCurrent/Vector eCurrent/Vector hCurrent/Vector
+   eMobility hMobility
+   eVelocity hVelocity
+   eQuasiFermi hQuasiFermi
+*-- Temperature
+   eTemperature
+*-- Fields and charges
+   ElectricField/Vector Potential SpaceCharge
+*-- Doping Profiles
+   Doping DonorConcentration AcceptorConcentration
+*-- Generation/Recombination
+   SRH Auger
+   AvalancheGeneration eAvalancheGeneration hAvalancheGeneration
+*-- Driving forces
+   eGradQuasiFermi/Vector hGradQuasiFermi/Vector
+   eEparallel hEparalllel
+*-- Band structure / Composition
+   BandGap
+   Affinity
+   ConductionBand ValenceBand
+   xMoleFraction
+*-- Traps (C-doped substrate)
+   eTrappedCharge  hTrappedCharge
+   eGapStatesRecombination hGapStatesRecombination
+}
+Math{
+   Extrapolate
+   Digits=           5
+   Notdamped=        50
+   Iterations=       15
+   RelErrControl
+   ErrRef(Electron)= 1e7
+   ErrRef(Hole)=     1e4
+   RelTermMinDensity=     1e4
+   RelTermMinDensityZero= 1e7
+   Number_of_Threads= 4
+   Method=    Blocked SubMethod=   Pardiso
+   ACMethod=  Blocked ACSubMethod= Pardiso
+}
+Solve{
+*- Initial Solution
+   NewCurrentPrefix="Init_"
+   Coupled(Iterations= 100){ Poisson }
+   Coupled{ Poisson Electron Hole }
+   Coupled{ Poisson Electron Hole eTemperature }
+*- Ramp drain to Vd, gate to VgMin
+   Quasistationary(
+      InitialStep= 0.01 Increment= 1.4
+      MinStep= 1e-6 MaxStep= 0.25
+      Goal{ Parameter= vg.dc Voltage= @Vgmin@ }
+      Goal{ Parameter= vd.dc Voltage= @Vd@ }
+  ){ Coupled { Poisson Electron Hole eTemperature } }
+*- AC analysis: Ramp Gate to Vgmax
+   NewCurrentPrefix=""
+   Quasistationary(
+      InitialStep= 0.1 Increment= 1.25
+      MinStep= 1e-6 MaxStep= 0.05
+      DoZero
+      Goal{ Parameter= vg.dc Voltage=@Vgmax@ }
+   ){ ACCoupled(
+        StartFrequency= 1e8 EndFrequency= 1e12
+        NumberOfPoints= @<nPerDecade*4+1>@ Decade
+        Node(1 2) Exclude(vg vd)
+        ACCompute( Time=(Range=(0 1) Intervals= 20) )
+      ){ Poisson Electron Hole eTemperature }
+      CurrentPlot( Time=(Range=(0 1) Intervals= 20) )
+   }
+}
