@@ -1,0 +1,265 @@
+;------------------------------------------------------------
+(sde:clear)
+;-------------------------------------------------------------------------------------
+; InGaAs HEMT  -  SDE structure file
+; Upper buffer study : CARBON (C) DOPED upper 0.3 um GaAs
+;
+; Workbench parameters:
+;   @C_Upper_Conc@  Carbon acceptor doping in R.GaAsUpper [cm^-3]
+;                   C substitutes on As site (C_As), shallow acceptor
+;                   Range: 1e15 to 5e16
+;                   Trap parameters @C_Upper_T1_Conc@ @C_Upper_T2_Conc@
+;                   are in the paired SDevice file only.
+;----------------------------------------------------------------------;
+(define HGaAsSub   0.8)
+(define HGaAsUpper 0.3)
+(define HGaAsLower 0.5)
+(define HChannel   0.01)
+(define HSpacer    0.0345)
+(define YDelta     0.031)
+(define DeltaThick 0.002)
+(define HGaAsCap   0.03)
+(define HPass      0.05)
+(define Xmax    0.8)
+(define Lg      0.25)
+(define Lc      0.05)
+(define GRecess 0.015)
+(define Wsp     0.04)
+(define WTrap   0.03)
+(define SheetCharge 5.4e12)
+
+(define C_Upper_Conc @C_Upper_Conc@)
+(display "C doping upper buffer: ") (display C_Upper_Conc) (display "cm-3") (newline)
+
+(define Y0   0.0)
+(define Y1   (+ Y0 HSpacer))
+(define Y2   (+ Y1 HChannel))
+(define Y2u  (+ Y2 HGaAsUpper))
+(define Y3   (+ Y2 HGaAsSub))
+(define Ym1  (- Y0 HGaAsCap))
+(define Ym2  (- Ym1 HPass))
+(define Xg   (/ Lg 2.0))
+(define Xsp  (+ Xg Wsp))
+(define Xgt  (+ Xg WTrap))
+(define Xc   (- Xmax Lc))
+(define XcM  (- Xmax (* 2.5 Lc)))
+(define Yg   (+ Y0 GRecess))
+(define XT   0.3)
+
+(sdegeo:create-rectangle (position Y2  0.0  0) (position Y2u Xmax 0) "GaAs" "R.GaAsUpper")
+(sdegeo:create-rectangle (position Y2u 0.0  0) (position Y3  Xmax 0) "GaAs" "R.GaAsLower")
+(sdegeo:create-rectangle (position Y1  0.0  0) (position Y2  Xmax 0) "InGaAs" "R.Channel")
+(sdegeo:create-rectangle (position Y0  0.0  0) (position Y1  Xmax 0) "AlGaAs" "R.SpacerB")
+(sdegeo:create-rectangle (position Ym1 0.0  0) (position Y0  Xmax 0) "GaAs" "R.GaAsCap")
+(sdegeo:create-rectangle (position Ym2 0.0  0) (position Ym1 Xmax 0) "Si3N4" "R.Passivation")
+
+(sdegeo:set-default-boolean "ABA")
+(sdegeo:create-rectangle (position Ym2 0.0 0) (position Yg Xsp 0) "Oxide" "R.Oxide")
+(define GateMetal  (sdegeo:create-rectangle (position Ym2 0.0 0) (position Yg Xg 0) "Metal" "R.GateMetal"))
+(define DrainMetal (sdegeo:create-rectangle (position Ym2 Xc 0) (position Y2 Xmax 0) "Metal" "R.DrainMetal"))
+
+(sdegeo:define-contact-set "gate"      4.0 (color:rgb 1.0 0.0 0.0) "##")
+(sdegeo:define-contact-set "drain"     4.0 (color:rgb 0.0 1.0 0.0) "##")
+(sdegeo:define-contact-set "substrate" 4.0 (color:rgb 0.5 0.0 0.5) "##")
+(sdegeo:set-current-contact-set "gate")
+(sdegeo:set-contact-boundary-edges GateMetal)
+(sdegeo:delete-region GateMetal)
+(sdegeo:set-current-contact-set "drain")
+(sdegeo:set-contact-boundary-edges DrainMetal)
+(sdegeo:delete-region DrainMetal)
+(sdegeo:define-2d-contact (find-edge-id (position Y3 0.01 0.0)) "substrate")
+(sdeio:save-tdr-bnd (get-body-list) "n@node@_half_bnd.tdr")
+
+(sdedr:define-constant-profile "Const.BG" "BoronActiveConcentration" 1e7)
+(sdedr:define-constant-profile-material "PlaceCD.BG"  "Const.BG" "GaAs")
+(sdedr:define-constant-profile-material "PlaceCD.BG2" "Const.BG" "AlGaAs")
+(sdedr:define-constant-profile-material "PlaceCD.BG3" "Const.BG" "InGaAs")
+
+; Carbon acceptor doping in upper 0.3 um buffer
+(sdedr:define-constant-profile "Const.CUpper" "BoronActiveConcentration" C_Upper_Conc)
+(sdedr:define-constant-profile-region "PlaceCD.CUpper" "Const.CUpper" "R.GaAsUpper")
+
+(sdedr:define-refeval-window "BaseLine.Delta" "Line"
+ (position YDelta (* Xmax -1.0) 0.0) (position YDelta (* Xmax 2.0) 0.0))
+(sdedr:define-gaussian-profile "Prof.Delta" "ArsenicActiveConcentration"
+ "PeakPos" 0 "PeakVal" (* (/ SheetCharge DeltaThick) 1.12838e4)
+ "Length" (* 0.5 DeltaThick) "Gauss" "Factor" 0.0)
+(sdedr:define-analytical-profile-placement "Place.Delta"
+ "Prof.Delta" "BaseLine.Delta" "Both" "NoReplace" "Eval")
+
+(sdedr:define-constant-profile "Const.GaAsCap" "ArsenicActiveConcentration" 3e18)
+(sdedr:define-constant-profile-region "PlaceCD.GaAsCap" "Const.GaAsCap" "R.GaAsCap")
+
+(sdedr:define-refeval-window "BaseLine.SD" "Line"
+ (position Ym1 (- Xmax (* 2 Lc)) 0.0) (position Ym1 (* 2 Xmax) 0.0))
+(sdedr:define-gaussian-profile "Impl.SDprof" "ArsenicActiveConcentration"
+ "PeakPos" 0 "PeakVal" 1e19
+ "ValueAtDepth" 5e17 "Depth" (* 1.75 (- Y2 Ym1)) "Gauss" "Factor" 0.4)
+(sdedr:define-analytical-profile-placement "Impl.Ext"
+ "Impl.SDprof" "BaseLine.SD" "Negative" "NoReplace" "Eval")
+
+(sdedr:define-refinement-size "Ref.Sub" (/ Y3 8.0) (/ Xmax 4.0) (/ Y3 16.0) (/ Xmax 8.0))
+(sdedr:define-refinement-region "RefPlace.Upper" "Ref.Sub" "R.GaAsUpper")
+(sdedr:define-refinement-region "RefPlace.Lower" "Ref.Sub" "R.GaAsLower")
+(sdedr:define-refeval-window "RWin.Spacer" "Rectangle" (position Y0 0.0 0.0) (position Y1 XT 0.0))
+(sdedr:define-refinement-size "Ref.Spacer" (/ HSpacer 6.0) 99 (/ HSpacer 8.0) 66)
+(sdedr:define-refinement-placement "RefPlace.Spacer" "Ref.Spacer" "RWin.Spacer")
+(sdedr:define-refeval-window "RWin.ActiveArea" "Rectangle"
+ (position (- Y0 0.01) 0.0 0.0) (position (+ Y2 0.05) (+ 0.5 Xsp) 0.0))
+(sdedr:define-refinement-size "Ref.ActiveArea" 0.025 (/ Lg 4.0) 0.02 (/ Lg 5.0))
+(sdedr:define-refinement-placement "RefPlace.ActiveArea" "Ref.ActiveArea" "RWin.ActiveArea")
+(sdedr:define-refeval-window "RWin.UnderGate" "Rectangle"
+ (position (- Yg 0.001) 0.0 0.0) (position Y1 Xsp 0.0))
+(sdedr:define-refinement-size "Ref.UnderGate" (/ (- Y1 Yg) 8.0) 99 (/ (- Y1 Yg) 10.0) 66)
+(sdedr:define-refinement-placement "RefPlace.UnderGate" "Ref.UnderGate" "RWin.UnderGate")
+(sdedr:define-refeval-window "RWin.CSplit" "Rectangle"
+ (position (- Y2u 0.02) 0.0 0.0) (position (+ Y2u 0.02) Xmax 0.0))
+(sdedr:define-refinement-size "Ref.CSplit" 5e-3 (/ Xmax 4.0) 2e-3 (/ Xmax 8.0))
+(sdedr:define-refinement-placement "RefPlace.CSplit" "Ref.CSplit" "RWin.CSplit")
+(sdedr:define-refeval-window "MBWindow.ChannelTop" "Rectangle"
+ (position (- Y1 8e-4) XT 0.0) (position (* 0.5 (+ Y2 Y1)) XcM 0.0))
+(sdedr:define-multibox-size "MBSize.ChannelTop" 0.1 99 8e-4 66 1.5 1.0)
+(sdedr:define-multibox-placement "MBPlace.ChannelTop" "MBSize.ChannelTop" "MBWindow.ChannelTop")
+(sdedr:define-refeval-window "MBWindow.ChannelBot" "Rectangle"
+ (position (* 0.5 (+ Y2 Y1)) XT 0.0) (position (+ Y2 8e-4) XcM 0.0))
+(sdedr:define-multibox-size "MBSize.ChannelBot" 0.1 99 8e-4 66 -1.5 1.0)
+(sdedr:define-multibox-placement "MBPlace.ChannelBot" "MBSize.ChannelBot" "MBWindow.ChannelBot")
+(sdedr:define-refeval-window "MBWindow.UnderChannel" "Rectangle"
+ (position Y2 0.0 0.0) (position Y3 XcM 0.0))
+(sdedr:define-multibox-size "MBSize.UnderChannel" 66 99 16e-4 66 2.0 1.0)
+(sdedr:define-multibox-placement "MBPlace.UnderChannel" "MBSize.UnderChannel" "MBWindow.UnderChannel")
+(sdedr:define-refeval-window "RWin.Drain" "Rectangle"
+ (position Ym1 (- Xmax (* 2.5 Lc)) 0.0) (position (* 1.5 (- Y2 Ym1)) Xmax 0.0))
+(sdedr:define-refinement-size "Ref.Drain" (/ (- Y2 Ym1) 4.0) (/ Lc 4.0) (/ (- Y2 Ym1) 5.0) (/ Lc 5.0))
+(sdedr:define-refinement-placement "RefPlace.Drain" "Ref.Drain" "RWin.Drain")
+
+(sdesnmesh:axisaligned "xCuts"
+ (list (+ YDelta (* 2.0 DeltaThick)) (+ YDelta (* 1.0 DeltaThick))
+       YDelta (- YDelta (* 1.0 DeltaThick)) (- YDelta (* 2.0 DeltaThick)) Y2u))
+
+(sde:build-mesh "n@node@_half_msh")
+(system:command "tdx -mtt -y -ren drain=source n@node@_half_msh n@node@_msh")
+(system:command "rm -f n@node@_half_msh.tdr")
+
+
+
+
+
+
+*----------------------------------------------------------------------*
+* SDevice  -  InGaAs HEMT  -  CARBON upper buffer study
+*
+* ======================================================================
+* Workbench parameters
+* ======================================================================
+*  @C_Upper_Conc@    C acceptor doping R.GaAsUpper [cm^-3]  1e15-5e16
+*                    Must match paired SDE node value.
+*
+*  @C_Upper_T1_Conc@ Trap 1 concentration [cm^-3]
+*                    C_As hole trap, acceptor at EV+0.40 eV
+*                    EnergyMid = 1.42-0.40 = 1.02 eV fromCondBand
+*                    Suggested range: 1e14 to @C_Upper_Conc@
+*                    eXsection=1.0e-17  hXsection=1.0e-14
+*                    Ref: Fujisawa et al. J.Appl.Phys. 82,2063 (1997)
+*
+*  @C_Upper_T2_Conc@ Trap 2 concentration [cm^-3]
+*                    C-DX mid-gap donor at EV+0.75 eV
+*                    EnergyMid = 1.42-0.75 = 0.67 eV fromCondBand
+*                    Suggested range: 1e13 to 0.2*@C_Upper_Conc@
+*                    eXsection=5.0e-16  hXsection=5.0e-18
+*                    Ref: Martin et al. Phys.Rev.B 16,2082 (1977)
+*
+*  @LowerTrap_Conc@  Original lower substrate trap [cm^-3]  fixed 1e16
+* ======================================================================
+*----------------------------------------------------------------------*
+Device HEMT {
+Electrode{
+   { Name="source"    Voltage=0.0 Resistor=150 }
+   { Name="drain"     Voltage=0.0 Resistor=150 }
+   { Name="gate"      Voltage=0.0 Schottky Barrier=0.9
+     eRecVelocity=1.e7 hRecVelocity=1.e7 }
+   { Name="substrate" Voltage=0.0 Resistor=1e3 }
+}
+File{ Grid="@tdr@" Parameter="@parameter@" Current="@plot@" Plot="@tdrdat@" }
+Physics {
+   Hydrodynamic( eTemperature )
+   Mobility( eHighFieldSaturation )
+   EffectiveIntrinsicDensity( NoBandGapNarrowing )
+   Recombination( SRH Auger Radiative )
+}
+Physics( Material="GaAs"   ){ Mobility( Dopingdependence ) }
+Physics( Material="AlGaAs" ){ MoleFraction( xFraction=0.30 Grading=0) }
+Physics( Material="InGaAs" ){ MoleFraction( xFraction=0.75 Grading=0) }
+
+* Upper buffer - Carbon traps
+Physics( Region="R.GaAsUpper" ){
+    Traps(
+       * Trap 1: C_As hole trap acceptor (EV+0.40 eV)
+       (Acceptor Conc=@C_Upper_T1_Conc@
+        EnergyMid=1.02 fromCondBand
+        eXsection=1.0e-17 hXsection=1.0e-14)
+       * Trap 2: C-DX mid-gap donor (EV+0.75 eV)
+       (Donor Conc=@C_Upper_T2_Conc@
+        EnergyMid=0.67 fromCondBand
+        eXsection=5.0e-16 hXsection=5.0e-18)
+    )
+}
+* Lower substrate - original baseline trap
+Physics( Region="R.GaAsLower" ){
+    Traps(
+       (Donor Conc=@LowerTrap_Conc@
+        EnergyMid=0.61 fromCondBand
+        eXsection=2.5e-18 hXsection=2.5e-16)
+    )
+}
+} *- End Device
+*----------------------------------------------------------------------*
+File{ Output="@log@" ACExtract="@acplot@" }
+System {
+   HEMT hemt (gate=1 drain=2 source=0 substrate=0)
+   Vsource_pset vg (1 0) { dc=0 }
+   Vsource_pset vd (2 0) { dc=0 }
+#if @Rfb@ != 0
+   Resistor_pset Rfb (1 2) { resistance=@Rfb@ }
+#endif
+}
+Plot{
+   eDensity hDensity TotalCurrent/Vector eCurrent/Vector hCurrent/Vector
+   eMobility hMobility eVelocity hVelocity eQuasiFermi hQuasiFermi
+   eTemperature ElectricField/Vector Potential SpaceCharge
+   Doping DonorConcentration AcceptorConcentration
+   SRH Auger AvalancheGeneration eAvalancheGeneration hAvalancheGeneration
+   eGradQuasiFermi/Vector hGradQuasiFermi/Vector eEparallel hEparalllel
+   BandGap Affinity ConductionBand ValenceBand xMoleFraction
+   eTrappedCharge hTrappedCharge eGapStatesRecombination hGapStatesRecombination
+}
+Math{
+   Extrapolate Digits=5 Notdamped=50 Iterations=15 RelErrControl
+   ErrRef(Electron)=1e7 ErrRef(Hole)=1e4
+   RelTermMinDensity=1e4 RelTermMinDensityZero=1e7
+   Number_of_Threads=4
+   Method=Blocked SubMethod=Pardiso ACMethod=Blocked ACSubMethod=Pardiso
+}
+Solve{
+   NewCurrentPrefix="Init_"
+   Coupled(Iterations=100){ Poisson }
+   Coupled{ Poisson Electron Hole }
+   Coupled{ Poisson Electron Hole eTemperature }
+   Quasistationary(
+      InitialStep=0.01 Increment=1.4 MinStep=1e-6 MaxStep=0.25
+      Goal{ Parameter=vg.dc Voltage=@Vgmin@ }
+      Goal{ Parameter=vd.dc Voltage=@Vd@ }
+   ){ Coupled{ Poisson Electron Hole eTemperature } }
+   NewCurrentPrefix=""
+   Quasistationary(
+      InitialStep=0.1 Increment=1.25 MinStep=1e-6 MaxStep=0.05 DoZero
+      Goal{ Parameter=vg.dc Voltage=@Vgmax@ }
+   ){ ACCoupled(
+        StartFrequency=1e8 EndFrequency=1e12
+        NumberOfPoints=@<nPerDecade*4+1>@ Decade
+        Node(1 2) Exclude(vg vd)
+        ACCompute( Time=(Range=(0 1) Intervals=20) )
+      ){ Poisson Electron Hole eTemperature }
+      CurrentPlot( Time=(Range=(0 1) Intervals=20) )
+   }
+}
