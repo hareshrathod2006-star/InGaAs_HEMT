@@ -1,0 +1,134 @@
+sdevice:*----------------------------------------------------------------------*
+Device HEMT {
+*----------------------------------------------------------------------*
+Electrode{
+   { Name="source" Voltage= 0.0 Resistor= 150 }
+   { Name="drain"  Voltage= 0.0 Resistor= 150 }
+   { Name="gate"   Voltage= 0.0 Schottky Barrier= 0.9
+       eRecVelocity= 1.e7 hRecVelocity= 1.e7 }
+   { Name="substrate"    Voltage= 0.0 Resistor= 1e3 }
+}
+File{
+   * Input Files    
+   Grid= "@tdr@"  
+   Parameter= "@parameter@"    
+   * Output Files   
+   Current= "@plot@"    
+   Plot= "@tdrdat@"         
+}
+Physics {
+   Hydrodynamic( eTemperature )                                
+   Mobility(
+      eHighFieldSaturation
+   )
+   EffectiveIntrinsicDensity( NoBandGapNarrowing )
+   Recombination(
+      SRH Auger Radiative
+   )
+}
+Physics( Material="GaAs" ){
+   Mobility( Dopingdependence )
+}
+Physics( Material="AlGaAs" ){
+   MoleFraction( xFraction= 0.30 Grading= 0)
+}
+Physics( Material="InGaAs"){
+   MoleFraction( xFraction= 0.75 Grading= 0)
+}
+Physics( Region="R.GaAsSub" ){
+    Traps(
+       (Donor Conc= 1e16 EnergyMid= 0.61 fromCondBand
+        eXsection= 2.5e-18 hXsection= 2.5e-16)
+    )
+}
+*----------------------------------------------------------------------*
+} *- End of Device{}
+*----------------------------------------------------------------------*
+File{
+   Output= "@log@"
+   ACExtract="@acplot@"
+}
+System {
+   HEMT hemt (gate=1 drain=2 source=0 substrate=0)
+   Vsource_pset vg ( 1 0 ) { dc= 0 }
+   Vsource_pset vd ( 2 0 ) { dc= 0 }
+#if @Rfb@ != 0
+   Resistor_pset Rfb (1 2) { resistance= @Rfb@ }
+#endif
+}
+Plot{
+*--Density and Currents, etc
+   eDensity hDensity
+   TotalCurrent/Vector eCurrent/Vector hCurrent/Vector
+   eMobility hMobility
+   eVelocity hVelocity
+   eQuasiFermi hQuasiFermi
+*--Temperature 
+   eTemperature 
+   * hTemperature Temperature
+*--Fields and charges
+   ElectricField/Vector Potential SpaceCharge
+*--Doping Profiles
+   Doping DonorConcentration AcceptorConcentration
+*--Generation/Recombination
+   SRH Auger
+   AvalancheGeneration eAvalancheGeneration hAvalancheGeneration
+*--Driving forces
+   eGradQuasiFermi/Vector hGradQuasiFermi/Vector
+   eEparallel hEparalllel
+*--Band structure/Composition
+   BandGap 
+   * BandGapNarrowing
+   Affinity
+   ConductionBand ValenceBand
+   xMoleFraction
+*--Traps
+   eTrappedCharge  hTrappedCharge
+   eGapStatesRecombination hGapStatesRecombination
+*--Heat generation
+   * TotalHeat eJouleHeat hJouleHeat RecombinationHeat
+}
+Math{
+   Extrapolate
+   Digits= 5
+   Notdamped= 50
+   Iterations= 15
+   RelErrControl
+   ErrRef(Electron) = 1e7
+   ErrRef(Hole)     = 1e4
+   RelTermMinDensity= 1e4
+   RelTermMinDensityZero= 1e7  
+   Number_of_Threads= 4
+   Method= Blocked SubMethod= Pardiso
+   ACMethod= Blocked ACSubMethod= Pardiso  
+}
+Solve{
+*- Initial Solution
+   NewCurrentPrefix="Init_"
+   Coupled(Iterations= 100){ Poisson }
+   Coupled{ Poisson Electron Hole }
+   Coupled{ Poisson Electron Hole eTemperature }
+*- Ramp drain to Vd, gate to VgMin
+   Quasistationary(
+      InitialStep= 0.01 Increment= 1.4
+      MinStep= 1e-6 MaxStep= 0.25    
+      Goal{ Parameter= vg.dc Voltage= @Vgmin@ }
+      Goal{ Parameter= vd.dc Voltage= @Vd@ }
+  ){ Coupled { Poisson Electron Hole eTemperature } }
+*- AC analysis: Ramp Gate to Vgmax 
+   NewCurrentPrefix=""
+   Quasistationary(
+      InitialStep= 0.1 Increment= 1.25
+      MinStep= 1e-6 MaxStep= 0.05
+      DoZero
+      Goal{ Parameter= vg.dc Voltage=@Vgmax@ }
+   ){ ACCoupled( 
+        StartFrequency= 1e8 EndFrequency= 1e12
+        * NumberOfPoints= points_Per_Decade*number_Of_Decades + 1
+        NumberOfPoints= @<nPerDecade*4+1>@ Decade
+        Node(1 2) Exclude(vg vd) 
+        ACCompute( Time=(Range=(0 1) Intervals= 20) )
+      ){ Poisson Electron Hole eTemperature }
+       CurrentPlot( Time=(Range=(0 1) Intervals= 20) ) 
+   }
+}
